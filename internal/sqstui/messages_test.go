@@ -3,6 +3,7 @@ package sqstui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -38,8 +39,12 @@ func TestMsgTimeAndCountUnknownWhenAbsent(t *testing.T) {
 	}
 
 	m.Attributes = map[string]string{"SentTimestamp": "1700000000000", "ApproximateReceiveCount": "3"}
-	if got := msgSentTime(m); !strings.HasPrefix(got, "2023-11-14") {
-		t.Errorf("SentTimestamp should render as a date, got %q", got)
+	// The rendered time is local (like every timestamp in the TUIs), so the
+	// expectation must be computed the same way — a hardcoded UTC date fails
+	// in any timezone ahead of UTC+2.
+	want := time.Unix(0, 1700000000000*int64(time.Millisecond)).Format("2006-01-02 15:04:05")
+	if got := msgSentTime(m); got != want {
+		t.Errorf("SentTimestamp = %q, want %q", got, want)
 	}
 	if got := msgReceiveCount(m); got != "3" {
 		t.Errorf("receive count = %q, want 3", got)
