@@ -256,6 +256,110 @@ func (e testingError) Error() string {
 	return string(e)
 }
 
+func TestClearAllFilters(t *testing.T) {
+	m := &model{
+		view:  viewEvents,
+		focus: focusEvents,
+		groups: []LogGroup{
+			{LogGroup: types.LogGroup{LogGroupName: aws.String("/aws/lambda/api")}, Region: "us-east-1"},
+			{LogGroup: types.LogGroup{LogGroupName: aws.String("/aws/lambda/worker")}, Region: "us-east-1"},
+		},
+		streams: []types.LogStream{
+			{LogStreamName: aws.String("2026/08/08/one")},
+			{LogStreamName: aws.String("2026/08/08/two")},
+		},
+		groupSearch:  textinput.New(),
+		streamSearch: textinput.New(),
+		eventSearch:  textinput.New(),
+		lookback:     defaultLookback,
+	}
+	m.groupSearch.SetValue("api")
+	m.streamSearch.SetValue("two")
+	m.eventSearch.SetValue("ERROR")
+	m.filterGroups()
+	m.filterStreams()
+	// The narrowed selection is "/aws/lambda/api" / ".../two".
+	if len(m.filteredGroups) != 1 || len(m.filteredStreams) != 1 {
+		t.Fatalf("fixture should be narrowed, got %d groups %d streams", len(m.filteredGroups), len(m.filteredStreams))
+	}
+
+	newModel, cmd := m.Update(keyMsg("C"))
+	m2 := newModel.(*model)
+	if m2.groupSearch.Value() != "" || m2.streamSearch.Value() != "" || m2.eventSearch.Value() != "" {
+		t.Error("C should clear all three filters")
+	}
+	if len(m2.filteredGroups) != 2 || len(m2.filteredStreams) != 2 {
+		t.Errorf("lists should widen after clearing, got %d groups %d streams", len(m2.filteredGroups), len(m2.filteredStreams))
+	}
+	// The selection stays on the same group/stream, not the same index.
+	if g, _ := m2.selectedGroup(); aws.ToString(g.LogGroupName) != "/aws/lambda/api" {
+		t.Errorf("selection should stay on the previously selected group, got %q", aws.ToString(g.LogGroupName))
+	}
+	if got := aws.ToString(m2.filteredStreams[m2.selectedStreamIdx].LogStreamName); got != "2026/08/08/two" {
+		t.Errorf("selection should stay on the previously selected stream, got %q", got)
+	}
+	if cmd == nil {
+		t.Error("clearing the event pattern on the events view should re-run the query")
+	}
+	if !m2.eventsLoading {
+		t.Error("the events panel should show loading while the query re-runs")
+	}
+}
+
+func TestClearAllFiltersNoop(t *testing.T) {
+	m := &model{
+		groupSearch:  textinput.New(),
+		streamSearch: textinput.New(),
+		eventSearch:  textinput.New(),
+	}
+	newModel, _ := m.Update(keyMsg("C"))
+	m2 := newModel.(*model)
+	if m2.toast != "No filters active" {
+		t.Errorf("C with nothing to clear should say so, got %q", m2.toast)
+	}
+	if m2.eventsLoading {
+		t.Error("C with nothing to clear must not re-query")
+	}
+}
+
+func TestCountLabel(t *testing.T) {
+	if got := countLabel(5, 40, false); got != "5" {
+		t.Errorf("unfiltered count = %q, want 5", got)
+	}
+	if got := countLabel(5, 40, true); got != "5/40" {
+		t.Errorf("filtered count = %q, want 5/40", got)
+	}
+}
+
+func TestAppliedFilterStaysVisible(t *testing.T) {
+	m := &model{
+		width:  100,
+		height: 30,
+		groups: []LogGroup{
+			{LogGroup: types.LogGroup{LogGroupName: aws.String("/aws/lambda/api")}, Region: "us-east-1"},
+		},
+		regions:      []string{"us-east-1"},
+		groupSearch:  textinput.New(),
+		streamSearch: textinput.New(),
+	}
+	m.groupSearch.SetValue("api")
+	m.filterGroups()
+
+	// The applied (inactive-input) filter must stay on screen — an invisible
+	// filter reads as "my groups disappeared".
+	out := m.renderSidebar(42)
+	if !strings.Contains(out, "api") || !strings.Contains(out, "C clears") {
+		t.Errorf("sidebar should show the applied filter and the clear hint:\n%s", out)
+	}
+
+	m2 := &model{width: 100, height: 30, streamSearch: textinput.New(), groupSearch: textinput.New()}
+	m2.streamSearch.SetValue("stderr")
+	out = m2.renderStreamsPanel(60)
+	if !strings.Contains(out, "stderr") {
+		t.Errorf("streams panel should show the applied filter:\n%s", out)
+	}
+}
+
 func TestDownloadKeyStartsAndGuards(t *testing.T) {
 	m := &model{
 		focus: focusGroups,

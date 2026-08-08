@@ -71,6 +71,7 @@ func helpSections() []helpSection {
 			{"Esc, q", "Close the viewer"},
 		}},
 		{"Everywhere", []row{
+			{"C", "Clear all filters (list filters + event pattern; find & grep in the log viewer)"},
 			{"Tab, Shift+Tab", "Cycle panel focus forward / back"},
 			{"~", "Debug: live view of what the tool is doing"},
 			{"i", "About this page"},

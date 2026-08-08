@@ -83,7 +83,7 @@ func TestHelpOverlayContent(t *testing.T) {
 		// Every binding must be discoverable here, not only via the
 		// (eliding) status bar.
 		"Download", "Shift+Tab", "Backspace", "g/Home, G/End", "n / N",
-		"Ctrl+U", "Copy the full record",
+		"Ctrl+U", "Copy the full record", "Clear all filters",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help overlay missing %q", want)

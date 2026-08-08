@@ -36,6 +36,29 @@ browser opened when the session is local). Press `?` anywhere — including
 inside the full log viewer — for the full key reference; the status bar only
 shows the keys usable right now (eliding on narrow terminals).
 
+### Filters & search — which one when
+
+There are five narrowing tools, one per layer. `C` clears them all at once.
+
+| Key | Where | What it narrows | Runs |
+|-----|-------|-----------------|------|
+| `/` | Group sidebar | The **list of group names** shown (also matches region) | Client-side, cosmetic |
+| `/` | Streams panel | The **list of stream names** shown | Client-side, cosmetic |
+| `/` | Events panel | **Which events AWS returns** — a [CloudWatch filter pattern](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html) (e.g. `ERROR`, `?timeout ?panic`, `{ $.level = "error" }`) applied by `FilterLogEvents`. Narrower patterns scan less data, so busy groups answer faster | **Server-side** |
+| `G` | Group sidebar | Not a filter — **scope**: search events across the whole group (all streams interleaved) instead of one stream, with the same pattern and window | Server-side |
+| `/` | Full log viewer | Nothing — **find-in-page**: highlights matches, `n`/`N` jump between them, every line stays visible | In-page |
+| `&` | Full log viewer | The **lines rendered** — only lines matching the regex show (like `less`), with a kept/total count | In-page |
+
+Rules of thumb: use the list `/`s to *find* a group or stream by name; use the
+events-panel `/` (plus the `p` window) when the log is busy and you only want
+certain events fetched at all; use `G` when you don't know which stream an
+event landed in; and inside the viewer use `/` to *locate* something while
+keeping context, or `&` to *isolate* matching lines.
+
+Applied filters stay visible: each panel shows its active filter value, the
+status bar switches to `shown/total` counts while a list is filtered, and
+`C` resets everything (in the viewer, `C` clears find and grep).
+
 ### Events panel
 
 Opening a stream (`Enter`) or searching a whole group (`G`) lists matching
