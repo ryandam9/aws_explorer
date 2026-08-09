@@ -26,12 +26,25 @@ otherwise the config's `aws.regions` list is used.
 ./bin/aws_explorer sqs -q orders
 ```
 
-The sidebar lists every queue your credentials can see across the selected
-regions (a region that denies `sqs:ListQueues` degrades to a logged warning,
-never an abort). In single-region mode the sidebar shows each visited queue's
-approximate depth; a blank means "not fetched yet", never zero.
+### Map of the UI
 
-### Queue overview
+Every surface has a fixed name (shown in its heading):
+
+| Name | What it is |
+|------|------------|
+| **[1] Queues** | Sidebar listing queues across the region scope |
+| **[2] Queue overview** | Right panel: the selected queue's attributes, tags, DLQ graph, metrics |
+| **[3] Messages** | Right panel after a peek: the sampled messages |
+| **Peek confirmation** | Overlay (`P`): the consent gate before a peek |
+| **Message record** | Overlay (`v`): one message, full body and attributes |
+
+The **[1] Queues** sidebar lists every queue your credentials can see across
+the selected regions (a region that denies `sqs:ListQueues` degrades to a
+logged warning, never an abort). In single-region mode the sidebar shows each
+visited queue's approximate depth; a blank means "not fetched yet", never
+zero.
+
+### [2] Queue overview
 
 Selecting a queue loads (and caches) its `GetQueueAttributes`,
 `ListQueueTags` and `ListDeadLetterSourceQueues` — three independent
@@ -55,7 +68,7 @@ The overview also shows the reverse redrive relationship — which queues use
 the selected queue as *their* DLQ — so both directions of the dead-letter
 graph are one keypress apart.
 
-### Message peek (`P`) — read-only, with one honest caveat
+### [3] Messages — the peek (`P`), read-only with one honest caveat
 
 SQS has no truly non-destructive read, so the peek is **opt-in behind a
 confirmation** that states exactly what it does:

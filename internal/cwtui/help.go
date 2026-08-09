@@ -21,7 +21,7 @@ type helpSection struct {
 func helpSections() []helpSection {
 	type row = struct{ key, action string }
 	return []helpSection{
-		{"Log groups (sidebar)", []row{
+		{"[1] Log groups (sidebar)", []row{
 			{"↑/↓, j/k", "Navigate groups (streams load eagerly)"},
 			{"Enter", "Open the group's streams"},
 			{"/", "Filter groups by name or region"},
@@ -29,14 +29,14 @@ func helpSections() []helpSection {
 			{"D", "Download the group's events in the query window to a file"},
 			{"o", "Copy the console URL (opens the browser when local)"},
 		}},
-		{"Log streams", []row{
+		{"[2] Log streams", []row{
 			{"↑/↓, j/k", "Navigate streams"},
 			{"Enter", "List the stream's events"},
 			{"/", "Filter streams by name"},
 			{"D", "Download the selected stream's events to a file"},
 			{"Esc, Backspace", "Back to the group list"},
 		}},
-		{"Events", []row{
+		{"[3] Log events", []row{
 			{"↑/↓, j/k", "Navigate events"},
 			{"Enter", "Open the full log viewer"},
 			{"v", "Record view: every field of the event in full, unclipped"},
@@ -57,7 +57,7 @@ func helpSections() []helpSection {
 			{"y", "Copy the full record to the clipboard"},
 			{"Esc, q, Enter", "Close (v closes too)"},
 		}},
-		{"Full log viewer", []row{
+		{"Log viewer (full-screen, Enter on an event)", []row{
 			{"↑/↓, j/k", "Scroll (scrolling up pauses tailing)"},
 			{"PgUp, PgDn", "Page up / down (also Ctrl+U / Ctrl+D)"},
 			{"g/Home, G/End", "Jump to top / bottom (bottom resumes tailing)"},

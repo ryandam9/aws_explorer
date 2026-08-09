@@ -799,7 +799,7 @@ func (m *model) renderViewer() string {
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorMuted()))
 	liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorSuccess())).Bold(true)
 
-	title := " Log: " + v.title
+	title := " Log viewer — " + v.title
 	if len(title) > m.width-20 {
 		title = title[:max(0, m.width-23)] + "..."
 	}

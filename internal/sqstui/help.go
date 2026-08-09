@@ -21,7 +21,7 @@ type helpSection struct {
 func helpSections() []helpSection {
 	type row = struct{ key, action string }
 	return []helpSection{
-		{"Queues (sidebar + overview)", []row{
+		{"[1] Queues + [2] Queue overview", []row{
 			{"↑/↓, j/k", "Navigate queues (details load eagerly, cached per queue)"},
 			{"/", "Filter queues by name or region"},
 			{"P", "Peek at a sample of the queue's messages (confirmation states the receive-count side effect)"},
@@ -33,7 +33,7 @@ func helpSections() []helpSection {
 			{"r", "Refresh the selected queue's attributes (and metrics if shown)"},
 			{"R", "Reload the queue list"},
 		}},
-		{"Messages (after a peek)", []row{
+		{"[3] Messages (after a peek)", []row{
 			{"↑/↓, j/k", "Navigate the sampled messages"},
 			{"PgUp, PgDn", "Page up / down (also Ctrl+U / Ctrl+D)"},
 			{"g/Home, G/End", "Jump to first / last message"},

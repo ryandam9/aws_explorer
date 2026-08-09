@@ -256,6 +256,41 @@ func (e testingError) Error() string {
 	return string(e)
 }
 
+// Every pane/page carries a fixed name in its heading so it can be referred
+// to unambiguously; renaming one is a breaking change to docs and help.
+func TestPaneNamesAreStable(t *testing.T) {
+	m := &model{
+		width:  120,
+		height: 40,
+		groups: []LogGroup{
+			{LogGroup: types.LogGroup{LogGroupName: aws.String("/aws/lambda/fn")}, Region: "us-east-1"},
+		},
+		streams:      []types.LogStream{{LogStreamName: aws.String("s-1")}},
+		regions:      []string{"us-east-1"},
+		groupSearch:  textinput.New(),
+		streamSearch: textinput.New(),
+		eventSearch:  textinput.New(),
+		lookback:     defaultLookback,
+	}
+	m.filterGroups()
+	m.filterStreams()
+
+	if out := m.renderSidebar(42); !strings.Contains(out, "[1] Log groups") {
+		t.Error("sidebar should be named [1] Log groups")
+	}
+	if out := m.renderStreamsPanel(70); !strings.Contains(out, "[2] Log streams") {
+		t.Error("streams panel should be named [2] Log streams")
+	}
+	if out := m.renderEventsPanel(70); !strings.Contains(out, "[3] Log events") {
+		t.Error("events panel should be named [3] Log events")
+	}
+
+	m.viewer = logViewer{active: true, title: "s-1 [us-east-1]", seen: map[string]bool{}, wrapW: 80}
+	if out := m.renderViewer(); !strings.Contains(out, "Log viewer —") {
+		t.Error("the full-screen page should be named Log viewer")
+	}
+}
+
 func TestClearAllFilters(t *testing.T) {
 	m := &model{
 		view:  viewEvents,

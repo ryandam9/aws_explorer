@@ -1095,9 +1095,13 @@ func (m *model) View() string {
 
 // cwAboutText explains what the CloudWatch Logs TUI is for, shown in the About
 // overlay ("i").
-const cwAboutText = "This is the CloudWatch Logs explorer. The sidebar lists log groups; pick " +
-	"one to see its streams, and open a stream (or the whole group) into a " +
-	"full-screen, live-tailing log page.\n\n" +
+const cwAboutText = "This is the CloudWatch Logs explorer. Its surfaces have fixed names so " +
+	"they're easy to refer to: the Browser screen holds the [1] Log groups " +
+	"sidebar, the [2] Log streams panel, and the [3] Log events panel (Tab " +
+	"cycles them, in that order). Enter on an event opens the full-screen Log " +
+	"viewer, and v opens the Event record overlay.\n\n" +
+	"Pick a group to see its streams, and open a stream (or the whole group " +
+	"via G) into the live-tailing Log viewer.\n\n" +
 	"On the events page, t switches between the plain list and a zebra-striped " +
 	"table, and p cycles the server-side query window (30m up to 7d) — narrower " +
 	"windows scan less data, so busy groups answer faster.\n\n" +
@@ -1136,7 +1140,9 @@ func (m *model) renderSidebar(width int) string {
 		Foreground(lipgloss.Color(ui.ColorHeading())).
 		Bold(true)
 
-	b.WriteString(headingStyle.Render(" Log groups") + "\n")
+	// Every pane carries a fixed, numbered name (the Tab order) so "the
+	// [1] Log groups pane" is unambiguous in docs, help, and conversation.
+	b.WriteString(headingStyle.Render(" [1] Log groups") + "\n")
 
 	if m.groupSearchActive {
 		b.WriteString(" " + m.groupSearch.View() + "\n")
@@ -1219,9 +1225,9 @@ func (m *model) renderStreamsPanel(width int) string {
 		Bold(true)
 
 	if grp, ok := m.selectedGroup(); ok {
-		b.WriteString(headingStyle.Render(" Log streams: "+aws.ToString(grp.LogGroupName)+" ["+grp.Region+"]") + "\n")
+		b.WriteString(headingStyle.Render(" [2] Log streams — "+aws.ToString(grp.LogGroupName)+" ["+grp.Region+"]") + "\n")
 	} else {
-		b.WriteString(headingStyle.Render(" Log streams") + "\n")
+		b.WriteString(headingStyle.Render(" [2] Log streams") + "\n")
 	}
 
 	if m.streamSearchActive {
@@ -1293,9 +1299,13 @@ func (m *model) renderEventsPanel(width int) string {
 		grpName = aws.ToString(grp.LogGroupName)
 		grpRegion = " [" + grp.Region + "]"
 	}
-	title := " Events: " + grpName + grpRegion
+	// One pane name regardless of scope — the scope is the suffix, so "the
+	// [3] Log events pane" always refers to this panel.
+	title := " [3] Log events"
 	if !m.groupLevelSearch && len(m.filteredStreams) > 0 {
-		title = " Stream events: " + aws.ToString(m.filteredStreams[m.selectedStreamIdx].LogStreamName) + grpRegion
+		title += " — " + aws.ToString(m.filteredStreams[m.selectedStreamIdx].LogStreamName) + grpRegion
+	} else if grpName != "" {
+		title += " — " + grpName + " (all streams)" + grpRegion
 	}
 	if len(title) > width-10 {
 		title = title[:width-13] + "..."

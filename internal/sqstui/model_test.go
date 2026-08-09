@@ -289,6 +289,24 @@ func TestConsumersMsgOutcomes(t *testing.T) {
 	}
 }
 
+// Every pane carries a fixed name in its heading so it can be referred to
+// unambiguously; renaming one is a breaking change to docs and help.
+func TestPaneNamesAreStable(t *testing.T) {
+	q := testQueue("orders-queue", "us-east-1")
+	m := testModel(q)
+
+	if out := m.renderSidebar(42); !strings.Contains(out, "[1] Queues") {
+		t.Error("sidebar should be named [1] Queues")
+	}
+	if out := m.renderOverviewPanel(70); !strings.Contains(out, "[2] Queue overview") {
+		t.Error("overview panel should be named [2] Queue overview")
+	}
+	m.peekQueue = q
+	if out := m.renderMessagesPanel(70); !strings.Contains(out, "[3] Messages") {
+		t.Error("messages panel should be named [3] Messages")
+	}
+}
+
 func TestHelpOverlayContent(t *testing.T) {
 	m := testModel()
 	m.width, m.height = 100, 40

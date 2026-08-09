@@ -77,8 +77,9 @@ func TestHelpOverlayContent(t *testing.T) {
 	m := &model{width: 100, height: 40}
 	out := m.helpOverlay()
 	for _, want := range []string{
-		"Log groups", "Log streams", "Events", "Event record", "Full log viewer",
-		"Everywhere",
+		// Section titles carry the panes' fixed names.
+		"[1] Log groups", "[2] Log streams", "[3] Log events", "Event record",
+		"Log viewer", "Everywhere",
 		"query window", "table view", "pan long messages", "Grep filter",
 		// Every binding must be discoverable here, not only via the
 		// (eliding) status bar.
