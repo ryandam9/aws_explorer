@@ -185,7 +185,7 @@ func NewModel(ctx context.Context, awsCfg *config.AWSConfig, regions []string, a
 	sSearch.Width = 30
 
 	eSearch := textinput.New()
-	eSearch.Placeholder = "CloudWatch pattern (e.g. ERROR, panic)…"
+	eSearch.Placeholder = "CloudWatch pattern(s); ; = OR (e.g. ERROR; timeout)…"
 	eSearch.Width = 40
 
 	vSearch := textinput.New()
@@ -297,9 +297,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case eventsMsg:
 		m.eventsLoading = false
-		if msg.err != nil {
+		if msg.err != nil && len(msg.events) == 0 {
 			m.err = msg.err
 		} else {
+			if msg.err != nil {
+				// Partial multi-pattern result: show what succeeded, but a
+				// failed pattern must never pass silently as "no matches".
+				m.setToast("Some patterns failed: " + clipToastText(msg.err.Error()))
+				cmds = append(cmds, toastCmd(5*time.Second))
+			}
 			m.events = msg.events
 			// Keep selected index in bounds
 			if m.selectedEventIdx >= len(m.events) {
@@ -829,7 +835,7 @@ func (m *model) downloadEventsCmd(grp LogGroup, streamName string) tea.Cmd {
 	lookback := m.lookback
 	return func() tea.Msg {
 		slog.Info("Downloading log events", "group", grpName, "region", region, "stream", streamName, "pattern", pattern, "window", formatLookback(lookback))
-		events, truncated, err := m.client.DownloadLogEvents(m.ctx, region, grpName, streamName, pattern, lookback)
+		events, truncated, err := m.client.DownloadLogEvents(m.ctx, region, grpName, streamName, SplitPatterns(pattern), lookback)
 		if err != nil {
 			slog.Warn("Downloading log events failed", "group", grpName, "region", region, "error", err.Error())
 			return downloadMsg{err: err}
@@ -997,7 +1003,8 @@ func (m *model) loadEventsCmd() tea.Cmd {
 
 	return func() tea.Msg {
 		slog.Info("Fetching log events", "group", grpName, "region", region, "stream", streamName, "pattern", pattern, "window", formatLookback(lookback))
-		events, err := m.client.GetLogEvents(m.ctx, region, grpName, streamName, pattern, lookback, 100)
+		since := time.Now().Add(-lookback).UnixMilli()
+		events, err := m.client.GetLogEventsSinceMulti(m.ctx, region, grpName, streamName, SplitPatterns(pattern), since, 100)
 		if err != nil {
 			slog.Warn("Fetching log events failed", "group", grpName, "region", region, "error", err.Error())
 		}
@@ -1593,6 +1600,16 @@ func sanitizeFilename(s string) string {
 	s = strings.ReplaceAll(s, "/", "_")
 	s = strings.ReplaceAll(s, " ", "_")
 	s = strings.ReplaceAll(s, ":", "-")
+	return s
+}
+
+// clipToastText keeps a toast one-line-sized; joined multi-pattern errors
+// can be long.
+func clipToastText(s string) string {
+	s = strings.ReplaceAll(s, "\n", " · ")
+	if r := []rune(s); len(r) > 120 {
+		return string(r[:119]) + "…"
+	}
 	return s
 }
 

@@ -2,9 +2,11 @@ package cwtui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -212,17 +214,135 @@ func (c *CWLogsClient) GetLogEvents(ctx context.Context, region, logGroupName, l
 	return c.GetLogEventsSince(ctx, region, logGroupName, logStreamName, filterPattern, start, limit)
 }
 
+// SplitPatterns splits a ";"-separated pattern input into individual
+// CloudWatch filter patterns, trimming whitespace and dropping empties. A
+// plain single pattern (no ";") passes through unchanged, and an empty input
+// yields one empty pattern ("no filter"). Each pattern runs as its own
+// server-side query; an event matching ANY of them is included (OR).
+func SplitPatterns(s string) []string {
+	if !strings.Contains(s, ";") {
+		return []string{strings.TrimSpace(s)}
+	}
+	var out []string
+	for _, p := range strings.Split(s, ";") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return []string{""}
+	}
+	return out
+}
+
+// mergeDedupeSort merges per-pattern result sets into one timeline: events
+// matching several patterns appear once (deduplicated by event ID), ordered
+// by timestamp, keeping the most recent `limit`.
+func mergeDedupeSort(batches [][]types.FilteredLogEvent, limit int32) []types.FilteredLogEvent {
+	seen := make(map[string]bool)
+	var merged []types.FilteredLogEvent
+	for _, batch := range batches {
+		for _, ev := range batch {
+			id := aws.ToString(ev.EventId)
+			if id != "" && seen[id] {
+				continue
+			}
+			if id != "" {
+				seen[id] = true
+			}
+			merged = append(merged, ev)
+		}
+	}
+	sort.SliceStable(merged, func(i, j int) bool {
+		return aws.ToInt64(merged[i].Timestamp) < aws.ToInt64(merged[j].Timestamp)
+	})
+	if limit > 0 && int32(len(merged)) > limit {
+		merged = merged[int32(len(merged))-limit:]
+	}
+	return merged
+}
+
+// GetLogEventsSinceMulti runs GetLogEventsSince once per pattern (in
+// parallel — pattern counts are small) and merges the results into one
+// deduplicated, time-ordered timeline. Failed patterns degrade the result:
+// the successful patterns' events are returned alongside a joined error so
+// the caller can show partial results WITH a visible note, never silently.
+func (c *CWLogsClient) GetLogEventsSinceMulti(ctx context.Context, region, logGroupName, logStreamName string, patterns []string, startMillis int64, limit int32) ([]types.FilteredLogEvent, error) {
+	if len(patterns) == 0 {
+		patterns = []string{""}
+	}
+	batches := make([][]types.FilteredLogEvent, len(patterns))
+	errs := make([]error, len(patterns))
+	var wg sync.WaitGroup
+	for i, pattern := range patterns {
+		wg.Add(1)
+		go func(i int, pattern string) {
+			defer wg.Done()
+			events, err := c.GetLogEventsSince(ctx, region, logGroupName, logStreamName, pattern, startMillis, limit)
+			batches[i] = events // write-by-index: no shared-slice race
+			if err != nil {
+				errs[i] = fmt.Errorf("pattern %q: %w", pattern, err)
+			}
+		}(i, pattern)
+	}
+	wg.Wait()
+	return mergeDedupeSort(batches, limit), errors.Join(errs...)
+}
+
 // downloadMaxEvents caps how many events a download ("D") fetches, bounding
 // memory and API round-trips on very busy groups. Hitting the cap is surfaced
 // to the user via the truncated flag — a capped download must never read as
 // the complete window.
 const downloadMaxEvents = 50000
 
-// DownloadLogEvents pages FilterLogEvents across the whole lookback window and
-// returns every matching event oldest-first — unlike GetLogEventsSince, which
-// keeps only the most recent `limit`. truncated reports that downloadMaxEvents
-// ended the download before the window was exhausted.
-func (c *CWLogsClient) DownloadLogEvents(ctx context.Context, region, logGroupName, logStreamName, filterPattern string, lookback time.Duration) ([]types.FilteredLogEvent, bool, error) {
+// DownloadLogEvents downloads every event matching ANY of the patterns
+// across the whole lookback window, merged into one deduplicated timeline.
+// Unlike the panel/viewer fetches, a download must be complete or explicitly
+// failed — one failed pattern fails the whole download rather than writing a
+// silently partial file. truncated reports that downloadMaxEvents cut the
+// result short.
+func (c *CWLogsClient) DownloadLogEvents(ctx context.Context, region, logGroupName, logStreamName string, patterns []string, lookback time.Duration) ([]types.FilteredLogEvent, bool, error) {
+	if len(patterns) == 0 {
+		patterns = []string{""}
+	}
+	batches := make([][]types.FilteredLogEvent, len(patterns))
+	truncs := make([]bool, len(patterns))
+	errs := make([]error, len(patterns))
+	var wg sync.WaitGroup
+	for i, pattern := range patterns {
+		wg.Add(1)
+		go func(i int, pattern string) {
+			defer wg.Done()
+			events, truncated, err := c.downloadPattern(ctx, region, logGroupName, logStreamName, pattern, lookback)
+			batches[i], truncs[i] = events, truncated
+			if err != nil {
+				errs[i] = fmt.Errorf("pattern %q: %w", pattern, err)
+			}
+		}(i, pattern)
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return nil, false, err
+	}
+
+	merged := mergeDedupeSort(batches, 0)
+	truncated := false
+	for _, t := range truncs {
+		truncated = truncated || t
+	}
+	if len(merged) > downloadMaxEvents {
+		merged = merged[len(merged)-downloadMaxEvents:]
+		truncated = true
+	}
+	return merged, truncated, nil
+}
+
+// downloadPattern pages FilterLogEvents for one pattern across the whole
+// lookback window, returning every matching event oldest-first — unlike
+// GetLogEventsSince, which keeps only the most recent `limit`. truncated
+// reports that downloadMaxEvents ended the download before the window was
+// exhausted.
+func (c *CWLogsClient) downloadPattern(ctx context.Context, region, logGroupName, logStreamName, filterPattern string, lookback time.Duration) ([]types.FilteredLogEvent, bool, error) {
 	input := &cloudwatchlogs.FilterLogEventsInput{
 		LogGroupName: aws.String(logGroupName),
 		StartTime:    aws.Int64(time.Now().Add(-lookback).UnixMilli()),
