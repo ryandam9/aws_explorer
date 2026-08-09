@@ -74,20 +74,32 @@ func TestHelpOverlayOverViewer(t *testing.T) {
 // The overlay content must cover every pane's keys so nothing is only
 // discoverable through the (eliding) status bar.
 func TestHelpOverlayContent(t *testing.T) {
-	m := &model{width: 100, height: 40}
-	out := m.helpOverlay()
-	for _, want := range []string{
-		// Section titles carry the panes' fixed names.
-		"[1] Log groups", "[2] Log streams", "[3] Log events", "Event record",
-		"Log viewer", "Everywhere",
-		"query window", "table view", "pan long messages", "Grep filter",
-		// Every binding must be discoverable here, not only via the
-		// (eliding) status bar.
-		"Download", "Shift+Tab", "Backspace", "g/Home, G/End", "n / N",
-		"Ctrl+U", "Copy the full record", "Clear all filters",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("help overlay missing %q", want)
+	// Wrapped action text may break a phrase across lines, so matching runs
+	// against a layout-normalized rendering: box-drawing characters removed
+	// and all whitespace collapsed.
+	normalize := func(s string) string {
+		s = strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ").Replace(s)
+		return strings.Join(strings.Fields(s), " ")
+	}
+
+	// Both layouts — two columns on a wide terminal, one column on a narrow
+	// one — must carry the full key reference.
+	for _, width := range []int{160, 60} {
+		m := &model{width: width, height: 40}
+		out := normalize(m.helpOverlay())
+		for _, want := range []string{
+			// Section titles carry the panes' fixed names.
+			"[1] Log groups", "[2] Log streams", "[3] Log events", "Event record",
+			"Log viewer", "Everywhere",
+			"query window", "table view", "pan long messages", "Grep filter",
+			// Every binding must be discoverable here, not only via the
+			// (eliding) status bar.
+			"Download", "Shift+Tab", "Backspace", "g/Home, G/End", "n / N",
+			"Ctrl+U", "Copy the full record", "Clear all filters",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("help overlay (width %d) missing %q", width, want)
+			}
 		}
 	}
 }

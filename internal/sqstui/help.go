@@ -1,10 +1,6 @@
 package sqstui
 
 import (
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/ryandam9/aws_explorer/internal/ui"
 )
 
@@ -58,28 +54,16 @@ func helpSections() []helpSection {
 	}
 }
 
-// helpOverlay renders the shared help page ("?") for this TUI.
+// helpOverlay renders the shared help page ("?") for this TUI, flowing into
+// two columns on wide terminals so the reference stays within screen height.
 func (m *model) helpOverlay() string {
-	w := m.width - 8
-	if w > 96 {
-		w = 96
-	}
-	if w < 30 {
-		w = 30
-	}
-
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorAccent())).Bold(true).Width(16)
-	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorMuted())).Bold(true)
-
-	var b strings.Builder
-	for i, sec := range helpSections() {
-		if i > 0 {
-			b.WriteString("\n")
+	secs := make([]ui.HelpSection, 0, 4)
+	for _, s := range helpSections() {
+		rows := make([]ui.HelpRow, 0, len(s.rows))
+		for _, r := range s.rows {
+			rows = append(rows, ui.HelpRow{Key: r.key, Action: r.action})
 		}
-		b.WriteString(sectionStyle.Render(sec.title) + "\n")
-		for _, r := range sec.rows {
-			b.WriteString(keyStyle.Render(r.key) + r.action + "\n")
-		}
+		secs = append(secs, ui.HelpSection{Title: s.title, Rows: rows})
 	}
-	return ui.HelpView("SQS Queues — keys", strings.TrimRight(b.String(), "\n"), w)
+	return ui.HelpColumnsView("SQS Queues — keys", secs, m.width)
 }
