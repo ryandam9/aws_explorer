@@ -35,9 +35,12 @@ const helpTwoColMinW = 84
 // columns, and action text soft-wraps inside its column with a hanging
 // indent, so no content is ever clipped horizontally.
 func HelpColumnsView(title string, sections []HelpSection, termW int) string {
-	w := termW - 8
-	if w > 110 {
-		w = 110
+	// The overlay takes ~70% of the terminal width — it is the full key
+	// reference, and cramped columns wrap more than they inform. Narrow
+	// terminals still get almost the whole width via the floor.
+	w := termW * 7 / 10
+	if w > termW-4 {
+		w = termW - 4
 	}
 	if w < 30 {
 		w = 30

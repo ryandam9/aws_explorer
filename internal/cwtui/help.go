@@ -21,7 +21,7 @@ func helpSections() []helpSection {
 			{"↑/↓, j/k", "Navigate groups (streams load eagerly)"},
 			{"Enter", "Open the group's streams"},
 			{"/", "Filter groups by name or region"},
-			{"G", "Search events across the whole group (all streams)"},
+			{"G", "Search events across the whole group (all streams) — prompts for pattern(s) when none is set; Enter on the empty prompt browses everything"},
 			{"D", "Download the group's events in the query window to a file"},
 			{"o", "Copy the console URL (opens the browser when local)"},
 		}},

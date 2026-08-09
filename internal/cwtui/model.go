@@ -426,6 +426,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, m.loadEventsCmd())
 			case "esc":
 				m.eventSearchActive = false
+				if m.eventSearch.Value() == "" && len(m.events) == 0 && !m.eventsLoading {
+					// Backing out of the G pattern prompt before any query
+					// ran: return to the streams panel instead of firing
+					// the unfiltered everything-query Esc normally means.
+					m.handleBack(&cmds)
+					return m, tea.Batch(cmds...)
+				}
 				m.eventSearch.SetValue("")
 				m.eventsLoading = true
 				cmds = append(cmds, m.loadEventsCmd())
@@ -513,8 +520,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.groupLevelSearch = !m.groupLevelSearch
 				m.view = viewEvents
 				m.focus = focusEvents
-				m.eventsLoading = true
 				m.watchMode = false
+				if m.groupLevelSearch && m.eventSearch.Value() == "" {
+					// G is a *search* across the whole group: with no
+					// pattern set yet, prompt for one instead of dumping
+					// every stream's events. Enter on the empty prompt
+					// still browses everything — but explicitly.
+					m.events = nil
+					m.selectedEventIdx = 0
+					m.eventsLoading = false
+					m.eventSearchActive = true
+					m.eventSearch.Focus()
+					break
+				}
+				m.eventsLoading = true
 				cmds = append(cmds, m.loadEventsCmd())
 			}
 
@@ -1335,6 +1354,9 @@ func (m *model) renderEventsPanel(width int) string {
 
 	if m.eventsLoading {
 		b.WriteString(fmt.Sprintf("  %s Filtering and loading log events…\n", m.spinner.View()))
+	} else if len(m.events) == 0 && m.eventSearchActive {
+		b.WriteString("  Type pattern(s) — ; separates OR'd patterns — and press Enter.\n")
+		b.WriteString("  An empty pattern browses every stream's events; Esc backs out.\n")
 	} else if len(m.events) == 0 {
 		b.WriteString("  No matching log events found in this window.\n")
 	} else if m.eventsTableMode {

@@ -256,6 +256,74 @@ func (e testingError) Error() string {
 	return string(e)
 }
 
+func groupSearchModel() *model {
+	m := &model{
+		focus: focusGroups,
+		view:  viewStreams,
+		filteredGroups: []LogGroup{
+			{LogGroup: types.LogGroup{LogGroupName: aws.String("/aws/lambda/fn")}, Region: "us-east-1"},
+		},
+		groupSearch:  textinput.New(),
+		streamSearch: textinput.New(),
+		eventSearch:  textinput.New(),
+		lookback:     defaultLookback,
+	}
+	return m
+}
+
+func TestGroupSearchPromptsWhenNoPattern(t *testing.T) {
+	m := groupSearchModel()
+
+	// G with no pattern set must prompt, not dump every stream's events.
+	newModel, _ := m.Update(keyMsg("G"))
+	m2 := newModel.(*model)
+	if !m2.groupLevelSearch || m2.view != viewEvents {
+		t.Fatal("G should enter group-level search on the events view")
+	}
+	if !m2.eventSearchActive {
+		t.Error("G with no pattern should open the pattern prompt")
+	}
+	if m2.eventsLoading {
+		t.Error("no query may run before the prompt is answered")
+	}
+
+	// Enter on the (still empty) prompt explicitly browses everything.
+	newModel, cmd := m2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m3 := newModel.(*model)
+	if m3.eventSearchActive || !m3.eventsLoading || cmd == nil {
+		t.Error("Enter on the prompt should run the query")
+	}
+}
+
+func TestGroupSearchWithPatternQueriesImmediately(t *testing.T) {
+	m := groupSearchModel()
+	m.eventSearch.SetValue("ERROR")
+
+	newModel, cmd := m.Update(keyMsg("G"))
+	m2 := newModel.(*model)
+	if m2.eventSearchActive {
+		t.Error("G with a pattern already set should not re-prompt")
+	}
+	if !m2.eventsLoading || cmd == nil {
+		t.Error("G with a pattern should query immediately")
+	}
+}
+
+func TestGroupSearchPromptEscBacksOut(t *testing.T) {
+	m := groupSearchModel()
+
+	newModel, _ := m.Update(keyMsg("G"))
+	newModel, _ = newModel.(*model).Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m2 := newModel.(*model)
+	if m2.view != viewStreams || m2.groupLevelSearch {
+		t.Errorf("Esc on the unanswered prompt should back out of group search, got view=%v groupLevel=%v",
+			m2.view, m2.groupLevelSearch)
+	}
+	if m2.eventsLoading {
+		t.Error("backing out must not fire the unfiltered everything-query")
+	}
+}
+
 func TestSplitPatterns(t *testing.T) {
 	tests := []struct {
 		in   string
