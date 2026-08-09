@@ -414,6 +414,31 @@ func TestViewerTableOpensRecordView(t *testing.T) {
 	}
 }
 
+func TestViewerClearFindAndGrep(t *testing.T) {
+	m := viewerModel("s1",
+		testEvent("e1", 1000, "an error occurred"),
+		testEvent("e2", 2000, "all good"),
+	)
+	m.viewer.search = textinput.New()
+	m.viewer.grepInput = textinput.New()
+	m.viewer.search.SetValue("error")
+	m.viewer.term = "error"
+	m.viewer.computeMatches()
+	m.viewer.setGrep("error")
+	if len(m.viewer.matches) == 0 || m.viewer.grepRe == nil {
+		t.Fatal("fixture should have an active find term and grep filter")
+	}
+
+	newModel, _ := m.Update(keyMsg("C"))
+	m2 := newModel.(*model)
+	if m2.viewer.term != "" || m2.viewer.grepRe != nil || len(m2.viewer.matches) != 0 {
+		t.Error("C should clear both the find term and the grep filter")
+	}
+	if m2.toast == "" {
+		t.Error("clearing should confirm via a toast")
+	}
+}
+
 func TestFormatEvents(t *testing.T) {
 	out := formatEvents([]types.FilteredLogEvent{
 		testEvent("e1", 1700000000000, "hello world"),

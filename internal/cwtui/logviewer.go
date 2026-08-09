@@ -714,6 +714,21 @@ func (m *model) handleViewerKeys(msg tea.KeyMsg, cmds *[]tea.Cmd) {
 		// Grep filter, as in less(1): only lines matching the regex render.
 		v.grepActive = true
 		v.grepInput.Focus()
+	case "C":
+		// One key to drop both in-viewer narrowing tools at once, matching
+		// the browser's clear-all-filters key.
+		if v.term == "" && v.grepRe == nil {
+			break
+		}
+		v.search.SetValue("")
+		v.term = ""
+		v.computeMatches()
+		v.grepInput.SetValue("")
+		v.setGrep("")
+		v.clampOffsetFor(bodyH)
+		m.setToast("Cleared find and grep")
+		*cmds = append(*cmds, toastCmd(3*time.Second))
+
 	case "n":
 		if line := v.nextMatch(1); line >= 0 {
 			v.follow = false
@@ -784,7 +799,7 @@ func (m *model) renderViewer() string {
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorMuted()))
 	liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorSuccess())).Bold(true)
 
-	title := " Log: " + v.title
+	title := " Log viewer — " + v.title
 	if len(title) > m.width-20 {
 		title = title[:max(0, m.width-23)] + "..."
 	}

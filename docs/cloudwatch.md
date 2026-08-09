@@ -36,7 +36,45 @@ browser opened when the session is local). Press `?` anywhere — including
 inside the full log viewer — for the full key reference; the status bar only
 shows the keys usable right now (eliding on narrow terminals).
 
-### Events panel
+### Map of the UI
+
+Every surface has a fixed name (shown in its heading), so docs, the `?` help
+overlay, and conversations can refer to them unambiguously. The numbers match
+the Tab-cycle order.
+
+| Name | What it is |
+|------|------------|
+| **Browser** | The main screen: the sidebar plus one right-hand panel |
+| **[1] Log groups** | Sidebar listing groups across the region scope |
+| **[2] Log streams** | Right panel: the selected group's streams |
+| **[3] Log events** | Right panel: events for the selected stream — or the whole group after `G` (the heading shows which) |
+| **Log viewer** | Full-screen page (`Enter` on an event): live tail, find/grep, table mode |
+| **Event record** | Overlay (`v`): one event, every field unclipped |
+
+### Filters & search — which one when
+
+There are five narrowing tools, one per layer. `C` clears them all at once.
+
+| Key | Where | What it narrows | Runs |
+|-----|-------|-----------------|------|
+| `/` | Group sidebar | The **list of group names** shown (also matches region) | Client-side, cosmetic |
+| `/` | Streams panel | The **list of stream names** shown | Client-side, cosmetic |
+| `/` | Events panel | **Which events AWS returns** — a [CloudWatch filter pattern](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html) (e.g. `ERROR`, `?timeout ?panic`, `{ $.level = "error" }`) applied by `FilterLogEvents`. Narrower patterns scan less data, so busy groups answer faster | **Server-side** |
+| `G` | Group sidebar | Not a filter — **scope**: search events across the whole group (all streams interleaved) instead of one stream, with the same pattern and window | Server-side |
+| `/` | Full log viewer | Nothing — **find-in-page**: highlights matches, `n`/`N` jump between them, every line stays visible | In-page |
+| `&` | Full log viewer | The **lines rendered** — only lines matching the regex show (like `less`), with a kept/total count | In-page |
+
+Rules of thumb: use the list `/`s to *find* a group or stream by name; use the
+events-panel `/` (plus the `p` window) when the log is busy and you only want
+certain events fetched at all; use `G` when you don't know which stream an
+event landed in; and inside the viewer use `/` to *locate* something while
+keeping context, or `&` to *isolate* matching lines.
+
+Applied filters stay visible: each panel shows its active filter value, the
+status bar switches to `shown/total` counts while a list is filtered, and
+`C` resets everything (in the viewer, `C` clears find and grep).
+
+### [3] Log events panel
 
 Opening a stream (`Enter`) or searching a whole group (`G`) lists matching
 events. The query runs server-side (`FilterLogEvents`) over a bounded
@@ -67,9 +105,9 @@ available via `Enter` (full log viewer) or `y` (copy). The `Stream`
 column appears in group-level search (`G`), where events interleave from many
 streams.
 
-### Full log viewer
+### Log viewer
 
-Pressing `Enter` on a log event opens the **full log viewer**: a full-screen
+Pressing `Enter` on a log event opens the **Log viewer**: a full-screen
 page with the entire log (the selected query window, most recent 2000 events)
 for the selected stream — or the whole group in group-level search — that
 streams new events live as they arrive. Each line is tinted by severity (error/fail/panic

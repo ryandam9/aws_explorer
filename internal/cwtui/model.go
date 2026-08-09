@@ -478,6 +478,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "D":
 			m.handleDownload(&cmds)
 
+		case "C":
+			m.clearAllFilters(&cmds)
+
 		case ui.KeyDebug:
 			m.debug.Open(m.width, m.height)
 
@@ -708,6 +711,71 @@ func (m *model) handleExport(cmds *[]tea.Cmd) {
 		m.setToast("Exported logs to " + path)
 	}
 	*cmds = append(*cmds, toastCmd(4*time.Second))
+}
+
+// clearAllFilters ("C") resets every text filter at once — the group and
+// stream list filters and the server-side event pattern — because several
+// filters silently combining is how "no results" mysteries happen. The
+// selection is re-pointed at the same group/stream in the widened lists, and
+// the event query re-runs when the events panel is showing (its pattern
+// changed).
+func (m *model) clearAllFilters(cmds *[]tea.Cmd) {
+	if m.groupSearch.Value() == "" && m.streamSearch.Value() == "" && m.eventSearch.Value() == "" {
+		m.setToast("No filters active")
+		*cmds = append(*cmds, toastCmd(3*time.Second))
+		return
+	}
+	selGroup, hadGroup := m.selectedGroup()
+	var selStream string
+	if len(m.filteredStreams) > 0 && m.selectedStreamIdx < len(m.filteredStreams) {
+		selStream = aws.ToString(m.filteredStreams[m.selectedStreamIdx].LogStreamName)
+	}
+
+	m.groupSearch.SetValue("")
+	m.streamSearch.SetValue("")
+	m.eventSearch.SetValue("")
+	m.filterGroups()
+	m.filterStreams()
+
+	if hadGroup {
+		for i, g := range m.filteredGroups {
+			if aws.ToString(g.LogGroupName) == aws.ToString(selGroup.LogGroupName) && g.Region == selGroup.Region {
+				m.selectedGroupIdx = i
+				break
+			}
+		}
+	}
+	if selStream != "" {
+		for i, s := range m.filteredStreams {
+			if aws.ToString(s.LogStreamName) == selStream {
+				m.selectedStreamIdx = i
+				break
+			}
+		}
+	}
+
+	if m.view == viewEvents {
+		m.eventsLoading = true
+		*cmds = append(*cmds, m.loadEventsCmd())
+	}
+	m.setToast("Cleared all filters")
+	*cmds = append(*cmds, toastCmd(3*time.Second))
+}
+
+// anyFilterActive reports whether any of the three browser filters is set,
+// for the status-bar hint and the x/y counts.
+func (m *model) anyFilterActive() bool {
+	return m.groupSearch.Value() != "" || m.streamSearch.Value() != "" || m.eventSearch.Value() != ""
+}
+
+// countLabel renders a list count for the status bar: plain when unfiltered,
+// "shown/total" when a filter is narrowing the list so the filtering is
+// visible at a glance.
+func countLabel(shown, total int, filtered bool) string {
+	if filtered {
+		return fmt.Sprintf("%d/%d", shown, total)
+	}
+	return fmt.Sprintf("%d", shown)
 }
 
 // handleDownload ("D") fetches every event for the current selection over the
@@ -996,8 +1064,11 @@ func (m *model) View() string {
 	if len(m.regions) == 1 {
 		regionLabel = m.regions[0]
 	}
-	statusText := fmt.Sprintf("Region: %s  ·  Groups: %d  ·  Streams: %d  ·  Events: %d",
-		regionLabel, len(m.filteredGroups), len(m.filteredStreams), len(m.events))
+	statusText := fmt.Sprintf("Region: %s  ·  Groups: %s  ·  Streams: %s  ·  Events: %d",
+		regionLabel,
+		countLabel(len(m.filteredGroups), len(m.groups), m.groupSearch.Value() != ""),
+		countLabel(len(m.filteredStreams), len(m.streams), m.streamSearch.Value() != ""),
+		len(m.events))
 	if m.view == viewEvents {
 		statusText += "  ·  Window: " + formatLookback(m.lookback)
 	}
@@ -1024,9 +1095,13 @@ func (m *model) View() string {
 
 // cwAboutText explains what the CloudWatch Logs TUI is for, shown in the About
 // overlay ("i").
-const cwAboutText = "This is the CloudWatch Logs explorer. The sidebar lists log groups; pick " +
-	"one to see its streams, and open a stream (or the whole group) into a " +
-	"full-screen, live-tailing log page.\n\n" +
+const cwAboutText = "This is the CloudWatch Logs explorer. Its surfaces have fixed names so " +
+	"they're easy to refer to: the Browser screen holds the [1] Log groups " +
+	"sidebar, the [2] Log streams panel, and the [3] Log events panel (Tab " +
+	"cycles them, in that order). Enter on an event opens the full-screen Log " +
+	"viewer, and v opens the Event record overlay.\n\n" +
+	"Pick a group to see its streams, and open a stream (or the whole group " +
+	"via G) into the live-tailing Log viewer.\n\n" +
 	"On the events page, t switches between the plain list and a zebra-striped " +
 	"table, and p cycles the server-side query window (30m up to 7d) — narrower " +
 	"windows scan less data, so busy groups answer faster.\n\n" +
@@ -1065,10 +1140,17 @@ func (m *model) renderSidebar(width int) string {
 		Foreground(lipgloss.Color(ui.ColorHeading())).
 		Bold(true)
 
-	b.WriteString(headingStyle.Render(" Log groups") + "\n")
+	// Every pane carries a fixed, numbered name (the Tab order) so "the
+	// [1] Log groups pane" is unambiguous in docs, help, and conversation.
+	b.WriteString(headingStyle.Render(" [1] Log groups") + "\n")
 
 	if m.groupSearchActive {
 		b.WriteString(" " + m.groupSearch.View() + "\n")
+	} else if v := m.groupSearch.Value(); v != "" {
+		// An applied filter must stay visible — an invisible filter is how
+		// "where did my groups go" mysteries happen.
+		accent := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorAccent()))
+		b.WriteString(" Filter: " + accent.Render(v) + "  (/ edits · C clears)\n")
 	} else {
 		b.WriteString("  (Press / to filter)\n")
 	}
@@ -1143,13 +1225,16 @@ func (m *model) renderStreamsPanel(width int) string {
 		Bold(true)
 
 	if grp, ok := m.selectedGroup(); ok {
-		b.WriteString(headingStyle.Render(" Log streams: "+aws.ToString(grp.LogGroupName)+" ["+grp.Region+"]") + "\n")
+		b.WriteString(headingStyle.Render(" [2] Log streams — "+aws.ToString(grp.LogGroupName)+" ["+grp.Region+"]") + "\n")
 	} else {
-		b.WriteString(headingStyle.Render(" Log streams") + "\n")
+		b.WriteString(headingStyle.Render(" [2] Log streams") + "\n")
 	}
 
 	if m.streamSearchActive {
 		b.WriteString(" " + m.streamSearch.View() + "\n")
+	} else if v := m.streamSearch.Value(); v != "" {
+		accent := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorAccent()))
+		b.WriteString(" Filter: " + accent.Render(v) + "  (/ edits · C clears)\n")
 	} else {
 		b.WriteString("  (Press / to filter streams)\n")
 	}
@@ -1214,9 +1299,13 @@ func (m *model) renderEventsPanel(width int) string {
 		grpName = aws.ToString(grp.LogGroupName)
 		grpRegion = " [" + grp.Region + "]"
 	}
-	title := " Events: " + grpName + grpRegion
+	// One pane name regardless of scope — the scope is the suffix, so "the
+	// [3] Log events pane" always refers to this panel.
+	title := " [3] Log events"
 	if !m.groupLevelSearch && len(m.filteredStreams) > 0 {
-		title = " Stream events: " + aws.ToString(m.filteredStreams[m.selectedStreamIdx].LogStreamName) + grpRegion
+		title += " — " + aws.ToString(m.filteredStreams[m.selectedStreamIdx].LogStreamName) + grpRegion
+	} else if grpName != "" {
+		title += " — " + grpName + " (all streams)" + grpRegion
 	}
 	if len(title) > width-10 {
 		title = title[:width-13] + "..."
@@ -1228,7 +1317,11 @@ func (m *model) renderEventsPanel(width int) string {
 	if m.eventSearchActive {
 		b.WriteString(" Query pattern: " + m.eventSearch.View() + window + "\n")
 	} else {
-		b.WriteString("  Pattern filter: " + accent.Render(m.eventSearch.Value()) + "  (Press / to set serverside query pattern)" + window + "\n")
+		hint := "  (Press / to set serverside query pattern)"
+		if m.eventSearch.Value() != "" {
+			hint = "  (/ edits · C clears all filters)"
+		}
+		b.WriteString("  Pattern filter: " + accent.Render(m.eventSearch.Value()) + hint + window + "\n")
 	}
 
 	b.WriteString("\n")
@@ -1389,12 +1482,17 @@ func (m *model) getHelpHints() []ui.KeyHint {
 		if m.viewer.grepRe != nil {
 			copyHint, exportHint = "copy matches", "export matches"
 		}
-		return []ui.KeyHint{
+		hints := []ui.KeyHint{
 			ui.H("↑/↓", "scroll"),
 			ui.H("PgUp/PgDn", "page"),
 			ui.H("/", "find"),
 			ui.H("&", "grep"),
 			ui.H("n/N", "next/prev"),
+		}
+		if m.viewer.term != "" || m.viewer.grepRe != nil {
+			hints = append(hints, ui.H("C", "clear find/grep"))
+		}
+		return append(hints,
 			ui.H("t", "table view"),
 			ui.H("G", "tail"),
 			ui.H("f", "follow"),
@@ -1403,7 +1501,7 @@ func (m *model) getHelpHints() []ui.KeyHint {
 			ui.H("s", exportHint),
 			ui.H("?", "help"),
 			ui.H("Esc", "close"),
-		}
+		)
 	}
 
 	switch m.focus {
@@ -1453,6 +1551,9 @@ func (m *model) getHelpHints() []ui.KeyHint {
 		)
 	}
 
+	if m.anyFilterActive() {
+		hints = append(hints, ui.H("C", "clear filters"))
+	}
 	hints = append(hints,
 		ui.H("Tab", "panel"),
 		ui.H("?", "help"),

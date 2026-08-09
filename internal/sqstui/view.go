@@ -77,10 +77,13 @@ func (m *model) View() string {
 }
 
 // sqsAboutText explains what the SQS TUI is for, shown in the About overlay.
-const sqsAboutText = "This is the SQS queue explorer. The sidebar lists every queue your " +
-	"credentials can see across the selected regions; the panel shows the " +
-	"selected queue's attributes, tags, and dead-letter relationships (d jumps " +
-	"to the DLQ).\n\n" +
+const sqsAboutText = "This is the SQS queue explorer. Its surfaces have fixed names: the [1] " +
+	"Queues sidebar, the [2] Queue overview panel, and the [3] Messages panel " +
+	"(shown after a peek), plus the Peek confirmation and Message record " +
+	"overlays.\n\n" +
+	"The sidebar lists every queue your credentials can see across the " +
+	"selected regions; the overview shows the selected queue's attributes, " +
+	"tags, and dead-letter relationships (d jumps to the DLQ).\n\n" +
 	"P peeks at a sample of the queue's visible messages. Peeking never " +
 	"deletes anything and returns visibility immediately, but SQS still " +
 	"increments each sampled message's receive count — on a queue with a " +
@@ -96,7 +99,9 @@ func (m *model) renderSidebar(width int) string {
 	var b strings.Builder
 
 	headingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorHeading())).Bold(true)
-	b.WriteString(headingStyle.Render(" Queues") + "\n")
+	// Panes carry fixed, numbered names so "the [1] Queues pane" is
+	// unambiguous in docs, help, and conversation.
+	b.WriteString(headingStyle.Render(" [1] Queues") + "\n")
 
 	if m.searchActive {
 		b.WriteString(" " + m.search.View() + "\n")
@@ -172,14 +177,14 @@ func (m *model) renderOverviewPanel(width int) string {
 
 	q, ok := m.selectedQueue()
 	if !ok {
-		b.WriteString(headingStyle.Render(" Queue overview") + "\n\n")
+		b.WriteString(headingStyle.Render(" [2] Queue overview") + "\n\n")
 		if !m.queuesLoading {
 			b.WriteString("  Select a queue in the sidebar.\n")
 		}
 		return m.panelBox(width, b.String())
 	}
 
-	title := " Queue: " + q.Name + " [" + q.Region + "]"
+	title := " [2] Queue overview — " + q.Name + " [" + q.Region + "]"
 	if len(title) > width-4 {
 		title = title[:max(0, width-7)] + "..."
 	}
@@ -310,7 +315,7 @@ func (m *model) renderMessagesPanel(width int) string {
 	headingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorHeading())).Bold(true)
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorMuted()))
 
-	title := " Messages: " + m.peekQueue.Name + " [" + m.peekQueue.Region + "]"
+	title := " [3] Messages — " + m.peekQueue.Name + " [" + m.peekQueue.Region + "]"
 	if len(title) > width-4 {
 		title = title[:max(0, width-7)] + "..."
 	}
