@@ -873,12 +873,35 @@ func (m *model) downloadEventsCmd(grp LogGroup, streamName string) tea.Cmd {
 }
 
 // formatEvents renders events as timestamped plain-text lines, the shared
-// format for clipboard copies and file exports.
+// format for clipboard copies and file exports. Blank lines are dropped:
+// CloudWatch messages near-universally end with a trailing newline (which
+// would otherwise put an empty line after every event), and interior empty
+// lines add nothing to line-per-entry log data. Leading indentation on
+// continuation lines (stack traces) is preserved; only trailing whitespace
+// and carriage returns are trimmed.
 func formatEvents(events []types.FilteredLogEvent) string {
 	var sb strings.Builder
 	for _, ev := range events {
 		t := time.Unix(0, aws.ToInt64(ev.Timestamp)*int64(time.Millisecond))
-		sb.WriteString(fmt.Sprintf("[%s] %s\n", t.Format("2006-01-02 15:04:05.000"), aws.ToString(ev.Message)))
+		prefix := "[" + t.Format("2006-01-02 15:04:05.000") + "]"
+		wrote := false
+		for _, line := range strings.Split(aws.ToString(ev.Message), "\n") {
+			line = strings.TrimRight(line, "\r \t")
+			if line == "" {
+				continue
+			}
+			if !wrote {
+				sb.WriteString(prefix + " " + line + "\n")
+				wrote = true
+			} else {
+				sb.WriteString(line + "\n")
+			}
+		}
+		if !wrote {
+			// A wholly blank message still marks that an event happened at
+			// this time — the timestamp line is kept, just with no text.
+			sb.WriteString(prefix + "\n")
+		}
 	}
 	return sb.String()
 }
