@@ -60,7 +60,7 @@ There are five narrowing tools, one per layer. `C` clears them all at once.
 | `/` | Group sidebar | The **list of group names** shown (also matches region) | Client-side, cosmetic |
 | `/` | Streams panel | The **list of stream names** shown | Client-side, cosmetic |
 | `/` | Events panel | **Which events AWS returns** — one or more [CloudWatch filter patterns](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html) separated by `;` (e.g. `ERROR; timeout; { $.level = "error" }`). Each pattern runs as its own query and an event matching **any** of them is included, deduplicated into one timeline. Narrower patterns scan less data, so busy groups answer faster | **Server-side** |
-| `G` | Group sidebar | Not a filter — **scope**: search events across the whole group (all streams interleaved) instead of one stream, with the same pattern and window | Server-side |
+| `G` | Group sidebar | Not a filter — **scope**: search events across the whole group (all streams interleaved) instead of one stream, with the same pattern and window. With no pattern set, `G` opens the pattern prompt first — `Enter` on the empty prompt explicitly browses everything, `Esc` backs out | Server-side |
 | `/` | Full log viewer | Nothing — **find-in-page**: highlights matches, `n`/`N` jump between them, every line stays visible | In-page |
 | `&` | Full log viewer | The **lines rendered** — only lines matching the regex show (like `less`), with a kept/total count | In-page |
 
