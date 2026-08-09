@@ -450,3 +450,36 @@ func TestFormatEvents(t *testing.T) {
 		t.Errorf("formatted output should be '[ts] msg\\n' lines, got %q", out)
 	}
 }
+
+func TestFormatEventsNoBlankLines(t *testing.T) {
+	out := formatEvents([]types.FilteredLogEvent{
+		// The near-universal case: a message with a trailing newline, which
+		// used to leave a blank line after every event.
+		testEvent("e1", 1700000000000, "first message\n"),
+		// Interior blank lines and CRLF endings.
+		testEvent("e2", 1700000001000, "line one\r\n\r\n\nline two\n\n"),
+		// A wholly blank message keeps its timestamp line.
+		testEvent("e3", 1700000002000, "\n\n"),
+		testEvent("e4", 1700000003000, "last"),
+	})
+
+	if strings.Contains(out, "\n\n") {
+		t.Errorf("export must contain no blank lines, got:\n%q", out)
+	}
+	for _, want := range []string{"first message", "line one", "line two", "last"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("blank-line stripping must not lose content %q", want)
+		}
+	}
+	// Stack-trace style indentation on continuation lines survives.
+	indented := formatEvents([]types.FilteredLogEvent{
+		testEvent("e5", 1700000004000, "panic: boom\n\tat main.go:10\n"),
+	})
+	if !strings.Contains(indented, "\tat main.go:10") {
+		t.Errorf("continuation indentation should be preserved, got %q", indented)
+	}
+	// Four events in, exactly five lines out (e2 spans two).
+	if got := strings.Count(out, "\n"); got != 5 {
+		t.Errorf("expected 5 lines, got %d:\n%q", got, out)
+	}
+}
