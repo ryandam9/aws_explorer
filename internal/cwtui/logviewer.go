@@ -518,7 +518,7 @@ func (m *model) loadViewerEventsCmd(initial bool) tea.Cmd {
 		since = time.Now().Add(-m.lookback).UnixMilli()
 	}
 	return func() tea.Msg {
-		events, err := m.client.GetLogEventsSince(m.ctx, key.region, key.group, key.stream, key.pattern, since, viewerBackfillLimit)
+		events, err := m.client.GetLogEventsSinceMulti(m.ctx, key.region, key.group, key.stream, SplitPatterns(key.pattern), since, viewerBackfillLimit)
 		return viewerEventsMsg{key: key, initial: initial, events: events, err: err}
 	}
 }
@@ -538,10 +538,11 @@ func (m *model) handleViewerEvents(msg viewerEventsMsg, cmds *[]tea.Cmd) {
 		m.viewer.loading = false
 	}
 	if msg.err != nil {
-		// Keep the viewer open on streaming hiccups; surface the error briefly.
-		m.setToast("Log fetch failed: " + msg.err.Error())
+		// Keep the viewer open on streaming hiccups; surface the error
+		// briefly. A partial multi-pattern batch still applies below — what
+		// succeeded is shown, with the failure visible.
+		m.setToast("Log fetch failed: " + clipToastText(msg.err.Error()))
 		*cmds = append(*cmds, toastCmd(3*time.Second))
-		return
 	}
 	m.viewer.append(msg.events)
 	if m.viewer.follow {

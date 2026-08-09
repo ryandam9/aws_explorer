@@ -256,6 +256,94 @@ func (e testingError) Error() string {
 	return string(e)
 }
 
+func TestSplitPatterns(t *testing.T) {
+	tests := []struct {
+		in   string
+		want []string
+	}{
+		// A single pattern passes through untouched — CloudWatch pattern
+		// syntax itself may contain spaces and special characters.
+		{"ERROR", []string{"ERROR"}},
+		{`{ $.level = "error" }`, []string{`{ $.level = "error" }`}},
+		{"ERROR; timeout", []string{"ERROR", "timeout"}},
+		{" ERROR ;; timeout ; ", []string{"ERROR", "timeout"}},
+		{"", []string{""}},
+		{" ; ; ", []string{""}},
+	}
+	for _, tt := range tests {
+		got := SplitPatterns(tt.in)
+		if len(got) != len(tt.want) {
+			t.Errorf("SplitPatterns(%q) = %v, want %v", tt.in, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("SplitPatterns(%q)[%d] = %q, want %q", tt.in, i, got[i], tt.want[i])
+			}
+		}
+	}
+}
+
+func TestMergeDedupeSort(t *testing.T) {
+	ev := func(id string, ts int64) types.FilteredLogEvent {
+		return types.FilteredLogEvent{
+			EventId:   aws.String(id),
+			Timestamp: aws.Int64(ts),
+			Message:   aws.String("m-" + id),
+		}
+	}
+	// The same event matched by two patterns must appear once; the merged
+	// timeline is time-ordered across batches.
+	merged := mergeDedupeSort([][]types.FilteredLogEvent{
+		{ev("a", 3000), ev("b", 1000)},
+		{ev("a", 3000), ev("c", 2000)},
+	}, 0)
+	if len(merged) != 3 {
+		t.Fatalf("expected 3 deduplicated events, got %d", len(merged))
+	}
+	for i, want := range []string{"b", "c", "a"} {
+		if aws.ToString(merged[i].EventId) != want {
+			t.Errorf("merged[%d] = %s, want %s", i, aws.ToString(merged[i].EventId), want)
+		}
+	}
+
+	// The limit keeps the most recent events, not the first ones.
+	limited := mergeDedupeSort([][]types.FilteredLogEvent{
+		{ev("a", 1000), ev("b", 2000), ev("c", 3000)},
+	}, 2)
+	if len(limited) != 2 || aws.ToString(limited[0].EventId) != "b" {
+		t.Errorf("limit should keep the most recent events, got %v", limited)
+	}
+}
+
+func TestEventsMsgPartialFailureKeepsEvents(t *testing.T) {
+	m := &model{}
+
+	// Partial result: events shown, failure surfaced as a toast — never
+	// silently, and never the full error screen.
+	partial := eventsMsg{
+		events: []types.FilteredLogEvent{{EventId: aws.String("e1"), Timestamp: aws.Int64(1000), Message: aws.String("hi")}},
+		err:    testingError(`pattern "bad(": invalid`),
+	}
+	newModel, _ := m.Update(partial)
+	m2 := newModel.(*model)
+	if m2.err != nil {
+		t.Error("a partial result must not raise the full error screen")
+	}
+	if len(m2.events) != 1 {
+		t.Error("the successful patterns' events should be kept")
+	}
+	if !strings.Contains(m2.toast, "Some patterns failed") {
+		t.Errorf("the failed pattern must be surfaced, got toast %q", m2.toast)
+	}
+
+	// Total failure still raises the error screen.
+	newModel, _ = m2.Update(eventsMsg{err: testingError("denied")})
+	if newModel.(*model).err == nil {
+		t.Error("a fully failed query should raise the error screen")
+	}
+}
+
 // Every pane/page carries a fixed name in its heading so it can be referred
 // to unambiguously; renaming one is a breaking change to docs and help.
 func TestPaneNamesAreStable(t *testing.T) {

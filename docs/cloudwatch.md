@@ -59,7 +59,7 @@ There are five narrowing tools, one per layer. `C` clears them all at once.
 |-----|-------|-----------------|------|
 | `/` | Group sidebar | The **list of group names** shown (also matches region) | Client-side, cosmetic |
 | `/` | Streams panel | The **list of stream names** shown | Client-side, cosmetic |
-| `/` | Events panel | **Which events AWS returns** — a [CloudWatch filter pattern](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html) (e.g. `ERROR`, `?timeout ?panic`, `{ $.level = "error" }`) applied by `FilterLogEvents`. Narrower patterns scan less data, so busy groups answer faster | **Server-side** |
+| `/` | Events panel | **Which events AWS returns** — one or more [CloudWatch filter patterns](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html) separated by `;` (e.g. `ERROR; timeout; { $.level = "error" }`). Each pattern runs as its own query and an event matching **any** of them is included, deduplicated into one timeline. Narrower patterns scan less data, so busy groups answer faster | **Server-side** |
 | `G` | Group sidebar | Not a filter — **scope**: search events across the whole group (all streams interleaved) instead of one stream, with the same pattern and window | Server-side |
 | `/` | Full log viewer | Nothing — **find-in-page**: highlights matches, `n`/`N` jump between them, every line stays visible | In-page |
 | `&` | Full log viewer | The **lines rendered** — only lines matching the regex show (like `less`), with a kept/total count | In-page |
@@ -83,7 +83,7 @@ faster. The active window shows in the panel header and the status bar.
 
 | Key | Action |
 |-----|--------|
-| `/` | Set the server-side query pattern (CloudWatch filter syntax) |
+| `/` | Set the server-side query pattern(s). Separate several with `;` to OR them — `ERROR; timeout` shows events matching either, across every stream when combined with `G`. Each pattern runs as its own `FilterLogEvents` query; results are deduplicated and interleaved by time. The pattern(s) also scope the full log viewer and the `D` download, so "download only the matched lines across all streams" is: `G` → set patterns → `D` |
 | `p` | Cycle the query window: 30m → 1h → 3h → 6h → 12h → 24h → 3d → 7d |
 | `t` | Toggle between the plain list and a zebra-striped table (the same table widget used across the app) |
 | `J` | In table mode, toggle JSON splitting (on by default): structured events get one column per top-level JSON field, numbered `(1) (2) …` for orientation, with a `Message` column holding whatever wasn't JSON (plain-text events, prefixes like Lambda's `INFO` tag, suffixes). Off = plain Time / Stream / Message |

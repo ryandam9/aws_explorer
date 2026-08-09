@@ -1,10 +1,6 @@
 package cwtui
 
 import (
-	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/ryandam9/aws_explorer/internal/ui"
 )
 
@@ -40,7 +36,7 @@ func helpSections() []helpSection {
 			{"↑/↓, j/k", "Navigate events"},
 			{"Enter", "Open the full log viewer"},
 			{"v", "Record view: every field of the event in full, unclipped"},
-			{"/", "Server-side query pattern (CloudWatch filter syntax)"},
+			{"/", "Server-side query pattern(s) — CloudWatch filter syntax; several patterns separated by ; are OR'd, each running as its own query"},
 			{"p", "Cycle the query window: 30m → 1h → … → 24h → 3d → 7d"},
 			{"t", "Toggle the zebra-striped table view"},
 			{"J", "Table view: split JSON events into one column per field"},
@@ -81,28 +77,17 @@ func helpSections() []helpSection {
 	}
 }
 
-// helpOverlay renders the shared help page ("?") for this TUI.
+// helpOverlay renders the shared help page ("?") for this TUI. The key
+// reference outgrew one column, so it flows into two on wide terminals
+// (ui.HelpColumnsView falls back to one column when the terminal is narrow).
 func (m *model) helpOverlay() string {
-	w := m.width - 8
-	if w > 96 {
-		w = 96
-	}
-	if w < 30 {
-		w = 30
-	}
-
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorAccent())).Bold(true).Width(16)
-	sectionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ui.ColorMuted())).Bold(true)
-
-	var b strings.Builder
-	for i, sec := range helpSections() {
-		if i > 0 {
-			b.WriteString("\n")
+	secs := make([]ui.HelpSection, 0, 8)
+	for _, s := range helpSections() {
+		rows := make([]ui.HelpRow, 0, len(s.rows))
+		for _, r := range s.rows {
+			rows = append(rows, ui.HelpRow{Key: r.key, Action: r.action})
 		}
-		b.WriteString(sectionStyle.Render(sec.title) + "\n")
-		for _, r := range sec.rows {
-			b.WriteString(keyStyle.Render(r.key) + r.action + "\n")
-		}
+		secs = append(secs, ui.HelpSection{Title: s.title, Rows: rows})
 	}
-	return ui.HelpView("CloudWatch Logs — keys", strings.TrimRight(b.String(), "\n"), w)
+	return ui.HelpColumnsView("CloudWatch Logs — keys", secs, m.width)
 }
